@@ -25,20 +25,23 @@ void avp_ui::on_btnStart_toggled()
     // if (checked)
     if (ui->btnStart->isChecked())
     {
-        std_msgs::Int16 msg;
+        
+        std_msgs::Int32 msg;
         msg.data = 1;
         // usleep(10000);
         button_start_publisher.publish(msg);
         ROS_INFO("publish the start signal!");
-        ui->btnStart->setText("终止泊车");
+        ui->btnStart->setText("终止行车");
+        ui->btnPause->setEnabled(true);
+        start_button_pressed = true;
         // ui->btnStart->setChecked(false);
         // ui->btnSelectCarport->setEnabled(true);
-
+        
         
     }
     else
     {
-        std_msgs::Int16 msg;
+        std_msgs::Int32 msg;
         msg.data = 1;
         // usleep(10000);
         termination_publisher.publish(msg);
@@ -57,7 +60,7 @@ void avp_ui::on_btnStart_toggled()
 
 // void avp_ui::on_btnStart_clicked()
 // {
-//   std_msgs::Int16 msg;
+//   std_msgs::Int32 msg;
 //   msg.data = 1;
 //   button_start_publisher.publish(msg);
 //   ROS_INFO("publish the start signal!");
@@ -67,11 +70,11 @@ void avp_ui::on_btnStart_toggled()
 //   ui->btnSelectCarport->setEnabled(true);
 // }
 
-  void avp_ui::on_btnPause_toggled()
-  {
+void avp_ui::on_btnPause_toggled()
+{
     if (ui->btnPause->isChecked())
     {
-        std_msgs::Int16 msg;
+        std_msgs::Int32 msg;
         msg.data = 1;
         // usleep(10000);
         pause_publisher.publish(msg);
@@ -81,14 +84,14 @@ void avp_ui::on_btnStart_toggled()
         pause_signal = true;
         // ui->lineEdit2->clear();
         // ui->lineEdit1->clear();
-        ui->lineEdit3->setText("暂停泊车");
+        ui->lineEdit3->setText("暂停行车");
         // ui->btnSelectCarport->setEnabled(true);
 
         
     }
     else
     {
-        std_msgs::Int16 msg;
+        std_msgs::Int32 msg;
         msg.data = 0;
         // usleep(10000);
         pause_publisher.publish(msg);
@@ -113,7 +116,7 @@ void avp_ui::on_btnStart_toggled()
 
 //     if (carport_id > 0)
 //     {
-//         std_msgs::Int16 msg;
+//         std_msgs::Int32 msg;
 //         msg.data = carport_id;
 //         select_carport_publisher.publish(msg);
 //         ROS_INFO("publish the selected carport id: %d", carport_id);
@@ -287,17 +290,17 @@ void avp_ui::on_btnStart_toggled()
 //         // 第一个参数是原始图像，第二个参数是新的图像，第三个参数是新的尺寸，第四个参数是插值方法
 //         cv::resize(ori_image, image, cv::Size(width, height), cv::INTER_LINEAR);
 
-//         // 在缩放的图上绘制轨迹点
-//         if (((head.frame_id == "ow") && (pause_signal == false) && (!traj_points.empty()) &&
-//              (planning_state > 0))) 
-//         {
-//           draw_traj_points();
-//         }
-//         // 在缩放的图上绘制轨迹点
+//         // // 在缩放的图上绘制轨迹点
+//         // if (((head.frame_id == "ow") && (pause_signal == false) && (!traj_points.empty()) &&
+//         //      (planning_state > 0))) 
+//         // {
+//         //   draw_traj_points();
+//         // }
+//         // // 在缩放的图上绘制轨迹点
 
 //         Q_EMIT imageSignal(image);
         
-//         std_msgs::Int16 msg;
+//         std_msgs::Int32 msg;
 //         msg.data = 1;
 //         sync_publisher.publish(msg);
 //         ROS_INFO("publish the sync flag: %d", msg.data);
@@ -310,20 +313,80 @@ void avp_ui::on_btnStart_toggled()
 //         return;
 //     }
 // }
+double avp_ui::unifyAngleRange(const double angle)
+{
+    auto new_angle = angle;
+    while (new_angle > M_PI)
+    {
+        new_angle -= 2 * M_PI;
+    }
+    while (new_angle < -M_PI)
+    {
+        new_angle += 2 * M_PI;
+    }
+    return new_angle;
+}
 
-void avp_ui::localization_callback(const localization_msgs::localization::ConstPtr& msg)
+void avp_ui::parkingroute_callback(const perception_msgs::parkingroute::ConstPtr &msg)
+{
+    // std::cout << "-----------------------------------------" << std::endl;
+    // perception_msgs::parkingroute current_msg = *msg;
+    if (msg->header.frame_id == "ow")
+    {
+        record_parkingroute = *msg;
+        ui->lineEdit2->setText("GPS");
+
+    }
+    else if (msg->header.frame_id == "ow_slam")
+    {
+        record_parkingroute.header = msg->header;
+
+        // UI在收到slam发来的轨迹后模拟鼠标点击开始按钮
+        ui->lineEdit2->setText("ORB_SLAM");
+        if(!start_button_pressed)
+        {
+            ui->btnStart->click();
+        }
+
+        for (size_t i = 0; i < msg->yaw_angles.size(); i++)
+        {
+            geometry_msgs::Point point;
+            point.x = msg->route_points[i].y;
+            point.y = -msg->route_points[i].x;
+            point.z = msg->route_points[i].z;
+
+            record_parkingroute.route_points.push_back(point);
+
+            record_parkingroute.yaw_angles.push_back(unifyAngleRange(msg->yaw_angles[i] - M_PI / 2));
+        }
+    }
+}
+
+void avp_ui::localization_callback(const gps_localization_msgs::localization::ConstPtr& msg)
+// void avp_ui::localization_callback(const localization_msgs::slam_localization::ConstPtr& msg)
 {
     auto head = msg->header;
     ROS_INFO("localization timestamp: %f", head.stamp.toSec());
 
-    if(head.frame_id == "ow")
+    if(head.frame_id == "ow" )
     { 
         realtime_car_location.x = msg->x;
         realtime_car_location.y = msg->y;
         realtime_car_location.yaw_angle = msg->yaw_angle;
         current_localization_timestamp = msg->header.stamp;
-        ROS_INFO("recieved localization and assign realtime_car_location! ");
+        ROS_INFO("recieved localization and assign realtime_car_location from GPS! ");
+        // ui->lineEdit2->setText("GPS");
     }
+    else if (head.frame_id == "ow_slam")
+    {
+        realtime_car_location.x = msg->y;
+        realtime_car_location.y = - msg->x;
+        realtime_car_location.yaw_angle = unifyAngleRange((msg->yaw_angle - 90) / 180 * M_PI) * 180 / M_PI;
+        current_localization_timestamp = msg->header.stamp;
+        ROS_INFO("recieved localization and assign realtime_car_location from SLAM! ");
+        // ui->lineEdit2->setText("ORB_SLAM");
+    }
+
 }
 
 
@@ -341,27 +404,27 @@ void avp_ui::trajectory_callback(const planning_msgs::TrajectoryStamped::ConstPt
 }
 
 
-void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
+void avp_ui::planning_state_callback(const std_msgs::Int32::ConstPtr &msg)
 {
     planning_state = msg->data; 
     QString str ;
 
     if (pause_signal == true)
     {
-        ui->lineEdit3->setText("暂停泊车");
+        ui->lineEdit3->setText("暂停行车");
     }
     else 
     {
         if (planning_state == 4)
         {
-            str = "开始泊车";
+            str = "开始行车";
             ui->lineEdit3->setText(str);
             ROS_INFO(" UI shows current planning state: %d", planning_state);
             // ui->btnSelectCarport->setEnabled(false);
         }
         else if (planning_state == 1)
         {
-            str = "正在泊车";
+            str = "正在行车";
             ui->lineEdit3->setText(str);
             ROS_INFO(" UI shows current planning state: %d", planning_state);
             // ui->btnSelectCarport->setEnabled(false);
@@ -369,7 +432,7 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
         }
         else if (planning_state == 2)
         {
-            str = "泊车完成";
+            str = "行车完成";
             ui->lineEdit3->setText(str);
             ROS_INFO(" UI shows current planning state: %d", planning_state);
 
@@ -381,12 +444,12 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
             // ui->lineEdit2->clear();
             // ui->lineEdit1->clear();
 
-            // sleep(5);
+
             // this->close();
             // qApp->quit();
 
             //泊车完成, 显示后关闭所有进程
-            std_msgs::Int16 msg;
+            std_msgs::Int32 msg;
             msg.data = 1;
             termination_publisher.publish(msg);
             ROS_INFO("terminate the parking process!");
@@ -394,6 +457,12 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
             ui->btnStart->setText("行车完成");
             ui->lineEdit3->setText("行车完成");
 
+            if (start_button_pressed)
+            {
+                sleep(5);
+                ui->btnStart->click();
+                start_button_pressed = false;
+            }
             // sleep(20);
             // this->close();
             // qApp->quit();
@@ -402,7 +471,7 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
         }
         else if (planning_state ==3)
         {
-            str = "泊车失败";
+            str = "行车失败";
             ui->lineEdit3->setText(str);
             ROS_INFO(" UI shows current planning state: %d", planning_state);
 
@@ -419,7 +488,7 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
             // qApp->quit();
 
             //当决策规划发来泊车失败，意味着AEB启动
-            std_msgs::Int16 msg;
+            std_msgs::Int32 msg;
             msg.data = 1;
 
             termination_publisher.publish(msg);
@@ -441,7 +510,18 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
             str = "未开始";
             ui->lineEdit3->setText(str);
             ROS_INFO(" UI shows current planning state: %d", planning_state);
-            // ui->btnSelectCarport->setEnabled(false);
+        }
+        else if (planning_state == 6)
+        {
+            str = "无法规划";
+            ui->lineEdit3->setText(str);
+            ROS_INFO(" UI shows current planning state: %d", planning_state);
+        }
+        else if (planning_state == 5)
+        {
+            str = "即将抵达";
+            ui->lineEdit3->setText(str);
+            ROS_INFO(" UI shows current planning state: %d", planning_state);
         }
     }
 
@@ -452,7 +532,7 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
 }
 
 
-// void avp_ui::locked_carport_callback(const std_msgs::Int16::ConstPtr &msg)
+// void avp_ui::locked_carport_callback(const std_msgs::Int32::ConstPtr &msg)
 // {   
 
 //     locked_id = msg->data; 
@@ -571,29 +651,29 @@ void avp_ui::planning_state_callback(const std_msgs::Int16::ConstPtr &msg)
 
 // }
 
-// void avp_ui::displayMat(cv::Mat image)
-// {
-//     cv::Mat rgb;
-//     QImage img;
-//       if(image.channels()==3)
-//       {
-//           //cvt Mat BGR 2 QImage RGB
-//           cv::cvtColor(image,rgb,CV_BGR2RGB);
-//           img = QImage((const unsigned char*)(rgb.data),
-//                       rgb.cols,rgb.rows,
-//                       rgb.cols*rgb.channels(),
-//                       QImage::Format_RGB888);
-//       }
-//       else
-//       {
-//           img = QImage((const unsigned char*)(image.data),
-//                       image.cols,image.rows,
-//                       image.cols*image.channels(),
-//                       QImage::Format_RGB888);
-//       }
-//       ui->label_pic->setPixmap(QPixmap::fromImage(img));
-//       ui->label_pic->resize(ui->label_pic->pixmap()->size());
-// }
+void avp_ui::displayMat(cv::Mat image)
+{
+    cv::Mat rgb;
+    QImage img;
+      if(image.channels()==3)
+      {
+          //cvt Mat BGR 2 QImage RGB
+          cv::cvtColor(image,rgb,CV_BGR2RGB);
+          img = QImage((const unsigned char*)(rgb.data),
+                      rgb.cols,rgb.rows,
+                      rgb.cols*rgb.channels(),
+                      QImage::Format_RGB888);
+      }
+      else
+      {
+          img = QImage((const unsigned char*)(image.data),
+                      image.cols,image.rows,
+                      image.cols*image.channels(),
+                      QImage::Format_RGB888);
+      }
+      ui->label_pic->setPixmap(QPixmap::fromImage(img));
+      ui->label_pic->resize(ui->label_pic->pixmap()->size());
+}
 
 
 avp_ui::avp_ui(QWidget *parent):
@@ -672,24 +752,28 @@ avp_ui::avp_ui(QWidget *parent):
 
     traj_sub = n.subscribe<planning_msgs::TrajectoryStamped>("/planning/trajectory_stamped",1, &avp_ui::trajectory_callback, this);
 
-    planning_state_sub = n.subscribe<std_msgs::Int16>("/planning/state", 1, &avp_ui::planning_state_callback, this);
-    // locked_carport_sub =n.subscribe<std_msgs::Int16>("/planning/lock_carport_id", 1, &avp_ui::locked_carport_callback, this);
+    planning_state_sub = n.subscribe<std_msgs::Int32>("/planning/avp_state", 1, &avp_ui::planning_state_callback, this);
+    // locked_carport_sub =n.subscribe<std_msgs::Int32>("/planning/lock_carport_id", 1, &avp_ui::locked_carport_callback, this);
     
     // subscription_parking_slots=n.subscribe<perception_msgs::ParkingSlots>("/perception/parking_slots", 1, &avp_ui::parkingslot_callback, this);      
 
 
-    button_start_publisher = n.advertise<std_msgs::Int16>("/avp_ui/start_button", 1);
-    // select_carport_publisher = n.advertise<std_msgs::Int16>("/avp_ui/selected_carport_id", 1);
+    button_start_publisher = n.advertise<std_msgs::Int32>("/avp_ui/start_button", 1);
+    // select_carport_publisher = n.advertise<std_msgs::Int32>("/avp_ui/selected_carport_id", 1);
 
-    sync_publisher = n.advertise<std_msgs::Int16>("/avp_ui/sync_talker", 1);
-    termination_publisher = n.advertise<std_msgs::Int16>("/avp_ui/stop_in_emergency", 1);
-    pause_publisher = n.advertise<std_msgs::Int16>("/avp_ui/pause_signal", 1);
+    // sync_publisher = n.advertise<std_msgs::Int32>("/avp_ui/sync_talker", 1);
+    termination_publisher = n.advertise<std_msgs::Int32>("/avp_ui/stop_in_emergency", 1);
+    pause_publisher = n.advertise<std_msgs::Int32>("/avp_ui/pause_signal", 1);
 
+    std::cout << "1-10" << std::endl;
 
     // image_sub = n.subscribe<sensor_msgs::CompressedImage>("/gpsd/detection_image",1, &avp_ui::img_callback, this);
-    // localization_sub = n.subscribe<localization_msgs::localization>("/apa_localization",100, &avp_ui::localization_callback, this);
-    
-    std::cout<<"1-10"<<std::endl;
+    localization_sub = n.subscribe<gps_localization_msgs::localization>("/avp_localization",100, &avp_ui::localization_callback, this);
+    subscription_parkingroute = n.subscribe<perception_msgs::parkingroute>("/parking_route", 1, &avp_ui::parkingroute_callback, this);
+
+    // localization_sub = n.subscribe<localization_msgs::slam_localization>("/avp_localization", 100, &avp_ui::localization_callback, this);
+
+    std::cout << "1-11" << std::endl;
 
     // message_filters::Subscriber<sensor_msgs::CompressedImage> img_sub(n, "/gpsd/detection_image", 1);
     // message_filters::Subscriber<localization_msgs::localization> location_sub(n, "/apa_localization", 1);
@@ -706,7 +790,7 @@ avp_ui::avp_ui(QWidget *parent):
     // sync = new message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(300), *img_sub, *location_sub);
     // sync->registerCallback(boost::bind(&avp_ui::img_location_callback,this, _1, _2));
     
-    std::cout<<"1-11"<<std::endl;
+
 
     
 

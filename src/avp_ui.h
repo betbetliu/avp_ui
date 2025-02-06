@@ -3,17 +3,26 @@
 
 #include <QWidget>
 #include <ros/ros.h>
-// #include <cv_bridge/cv_bridge.h>
-// #include <sensor_msgs/Image.h>
-// #include <sensor_msgs/CompressedImage.h>
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/CompressedImage.h>
+
+#include <geometry_msgs/Point.h>
+
 #include <std_msgs/Int16.h>
-// #include <sensor_msgs/image_encodings.h>
-#include "localization_msgs/localization.h"
+#include <std_msgs/Int32.h>
+
+#include <sensor_msgs/image_encodings.h>
+
+#include "localization_msgs/slam_localization.h"
+#include "gps_localization_msgs/localization.h"
+
 #include "planning_msgs/TrajectoryStamped.h"
 #include "planning_msgs/TrajectoryPoint.h"
 
 #include "perception_msgs/ParkingSlot.h"
 #include "perception_msgs/ParkingSlots.h"
+#include "perception_msgs/parkingroute.h"
 
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
@@ -22,7 +31,7 @@
 
 #include <unistd.h>
 
-namespace Ui {
+    namespace Ui {
 class avp_ui;
 }
 
@@ -38,9 +47,12 @@ public:
     ~avp_ui();
 
     // void img_callback(const sensor_msgs::CompressedImageConstPtr& msg);
-    void planning_state_callback(const std_msgs::Int16::ConstPtr& msg);
+    void planning_state_callback(const std_msgs::Int32::ConstPtr& msg);
     // void locked_carport_callback(const std_msgs::Int16::ConstPtr& msg);
-    void localization_callback(const localization_msgs::localization::ConstPtr& msg);
+
+    void localization_callback(const gps_localization_msgs::localization::ConstPtr& msg);
+    // void localization_callback(const localization_msgs::slam_localization::ConstPtr &msg);
+
     void trajectory_callback(const planning_msgs::TrajectoryStamped::ConstPtr& msg); 
     // void img_location_callback(const sensor_msgs::CompressedImageConstPtr& msg1, const localization_msgs::localization::ConstPtr& msg2);
     // void parkingslot_callback(const perception_msgs::ParkingSlots::ConstPtr& msg);
@@ -49,18 +61,22 @@ public:
     bool m_isPaused = false;
     bool m_isTerminated = false;
 
+    double unifyAngleRange(const double angle);
 
+    void parkingroute_callback(const perception_msgs::parkingroute::ConstPtr& msg);
+
+    perception_msgs::parkingroute record_parkingroute;
 
 signals:
-    // void imageSignal(cv::Mat);
-    // void planningStateSignal(Int16 value);
+    void imageSignal(cv::Mat);
+    void planningStateSignal(std_msgs::Int32 value);
     // void lockedCarportSignal(Int16 value);
 public slots:
 // private slots:
     // void on_slider_value_change(int value);
     // void on_btnStart_clicked();
     // void on_btnSelectCarport_clicked();
-    // void displayMat(cv::Mat image);
+    void displayMat(cv::Mat image);
     void on_btnStart_toggled();
     void on_btnPause_toggled();
     void timerSlot();
@@ -73,7 +89,7 @@ private:
     // ros::Publisher select_carport_publisher;
     ros::Publisher button_start_publisher;
 
-    ros::Publisher sync_publisher;
+    // ros::Publisher sync_publisher;
     ros::Publisher termination_publisher;
     ros::Publisher pause_publisher;
 
@@ -86,20 +102,22 @@ private:
 
     ros::Subscriber localization_sub;
     ros::Subscriber traj_sub;
+    ros::Subscriber subscription_parkingroute;
 
     // message_filters::Subscriber<sensor_msgs::CompressedImage>* img_sub;             // topic1 输入
     // message_filters::Subscriber<localization_msgs::localization>* location_sub;   // topic2 输入
-    // message_filters::Synchronizer<MySyncPolicy>* sync;   
+    // message_filters::Synchronizer<MySyncPolicy>* sync;
 
-
-    // cv::Mat image;
+    cv::Mat image;
     int planning_state = 0;
     int locked_id = -1;
 
-    localization_msgs::localization realtime_car_location;
+    gps_localization_msgs::localization realtime_car_location;
+    // localization_msgs::slam_localization realtime_car_location;
+
     std::vector<planning_msgs::TrajectoryPoint> traj_points;
     planning_msgs::TrajectoryPoint target_point;
-    perception_msgs::ParkingSlot target_carport;
+    // perception_msgs::ParkingSlot target_carport;
     // std::vector<perception_msgs::ParkingSlot> record_parkingslot; // record parking slot
 
 
@@ -119,8 +137,11 @@ private:
     bool pause_signal = false; //true为处于暂停状态 false为继续运行状态
 
     ros::Time current_localization_timestamp = ros::Time(0.0);
-    // ros::Time current_img_timestamp = ros::Time(0.0);
+    ros::Time current_img_timestamp = ros::Time(0.0);
     // ros::Time current_slot_timestamp = ros::Time(0.0);
+
+    bool start_button_pressed = false;
+    int localization_methods = 0; // 0: gps 1: slam
 
 
 

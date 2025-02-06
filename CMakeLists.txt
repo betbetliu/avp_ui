@@ -9,13 +9,15 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
 # sensor_msgs
-#  cv_bridge
+  cv_bridge
   planning_msgs
   localization_msgs
   message_filters
   perception_msgs
+  geometry_msgs
 )
 find_package(OpenCV REQUIRED)
+#find_package(Boost REQUIRED)
 
 
 
@@ -28,7 +30,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
-set(Boost_USE_STATIC_LIBS ON)
+# set(Boost_USE_STATIC_LIBS ON)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -64,7 +66,7 @@ QT5_WRAP_CPP(QT_MOC_HPP ${QT_MOC})
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES client_plugin
-   CATKIN_DEPENDS roscpp std_msgs sensor_msgs  planning_msgs perception_msgs localization_msgs message_filters
+   CATKIN_DEPENDS roscpp std_msgs sensor_msgs  planning_msgs perception_msgs localization_msgs message_filters cv_bridge 
    DEPENDS OpenCV 
 )
 
